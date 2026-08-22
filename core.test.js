@@ -1,49 +1,30 @@
-// node core.test.js
-var assert = require('assert');
-var I = require('./core.js');
+const assert = require('assert');
+const CSSGradient = require('./core');
 
-var ZWSP = '​', NBSP = ' ', RLO = '‮', SOFT = '­';
-var TAG = String.fromCodePoint(0xE0041); // an invisible "tag" letter (steganography)
-var VS = '️';                        // variation selector
+const legacy = CSSGradient.linear('90deg', '#ff007a', '#7928ca');
+assert.strictEqual(legacy.css, 'background: linear-gradient(90deg, #ff007a, #7928ca);');
 
-var sample = 'he' + ZWSP + 'llo' + NBSP + 'wor' + SOFT + 'ld' + RLO + 'x' + TAG + VS;
+const linear = CSSGradient.parse('linear 135deg | rgb(59, 130, 246) 0%, #ec4899 55%, #9333ea 100%');
+assert.strictEqual(linear.type, 'linear');
+assert.strictEqual(linear.stops.length, 3);
+assert.ok(linear.value.includes('rgb(59, 130, 246) 0%'));
 
-var r = I.scan(sample);
-assert.strictEqual(r.total, 6, 'finds all six hidden chars');
-assert.strictEqual(r.counts['zero-width'], 1);
-assert.strictEqual(r.counts['space'], 1);
-assert.strictEqual(r.counts['soft-hyphen'], 1);
-assert.strictEqual(r.counts['bidi'], 1);
-assert.strictEqual(r.counts['tag-char'], 1);
-assert.strictEqual(r.counts['variation-selector'], 1);
+const radial = CSSGradient.parse('radial circle at 30% 40% | #fff 0%, #111 100%');
+assert.strictEqual(radial.value, 'radial-gradient(circle at 30% 40%, #fff 0%, #111 100%)');
 
-var cleaned = I.clean(sample);
-assert.strictEqual(cleaned, 'hello worldx', 'strips invisibles, NBSP becomes a real space');
-assert.strictEqual(I.scan(cleaned).total, 0, 'cleaned text has nothing left to flag');
+const conic = CSSGradient.parse('conic from 45deg at center | red, gold, lime, cyan, blue, red');
+assert.strictEqual(conic.type, 'conic');
+assert.strictEqual(conic.stops.length, 6);
 
-// Visible typography (em dash, smart quotes) must not be flagged or stripped.
-var visible = 'Normal text.\nTab\there. Em—dash and “quotes”.';
-assert.strictEqual(I.scan(visible).total, 0, 'em dash / smart quotes are not hidden characters');
-assert.strictEqual(I.clean(visible), visible, 'clean leaves visible text exactly alone');
+const oldInput = CSSGradient.parse('135deg, #3b82f6, #ec4899');
+assert.strictEqual(oldInput.type, 'linear');
 
-// Opt-in punctuation normalize drops it to plain ASCII.
-assert.strictEqual(I.normalizePunctuation('“a”—b…'), '"a"--b...');
+const mesh = CSSGradient.parse('mesh');
+assert.strictEqual(mesh.type, 'mesh');
+assert.strictEqual((mesh.value.match(/radial-gradient/g) || []).length, 3);
 
-// Never throws on non-strings.
-assert.strictEqual(I.scan(null).total, 0);
-assert.strictEqual(I.clean(undefined), '');
+assert.throws(() => CSSGradient.parse('linear 90deg | red'), /two color stops/);
+assert.throws(() => CSSGradient.parse('linear 90deg | red, url(https:\/\/example.com\/x)'), /unsupported CSS/);
+assert.throws(() => CSSGradient.parse('linear 90deg | rgb(1, 2, 3, red'), /Unbalanced parentheses/);
 
-// The extension ships its own copy of core.js. They drifted once already.
-const fs = require('fs');
-const path = require('path');
-assert.strictEqual(
-  fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8'),
-  fs.readFileSync(path.join(__dirname, 'extension', 'core.js'), 'utf8'),
-  'extension/core.js is out of sync with core.js');
-
-// The UI splits category labels on ": " to get the short name.
-Object.values(I.CATEGORIES).forEach(function (label) {
-  assert.ok(label.indexOf(': ') > 0, 'category label has no ": " separator: ' + label);
-});
-
-console.log('ok, all assertions passed');
+console.log('ok, all CSSGradient assertions passed');
